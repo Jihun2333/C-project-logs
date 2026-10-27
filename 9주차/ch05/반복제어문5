@@ -1,0 +1,17 @@
+#include <stdio.h>
+
+int main() {
+    int base, height;
+    char answer;
+    while (1) {
+        scanf("%d %d", &base, &height);
+        double area = (double)(base * height) / 2.0;
+        printf("Triangle area = %.1f\n", area);
+        printf("Continue? ");
+        scanf(" %c", &answer);
+        if (answer != 'Y' && answer != 'y') {
+            break;
+        }
+    }
+    return 0;
+}
