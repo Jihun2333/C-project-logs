@@ -1,0 +1,18 @@
+#include <stdio.h>
+
+struct Info {
+    char school[21];
+    int grade;
+};
+
+int main() {
+    struct Info s1 = {"Jejuelementary", 6};
+    struct Info s2;
+
+    scanf("%s %d", s2.school, &s2.grade);
+
+    printf("%d grade in %s School\n", s1.grade, s1.school);
+    printf("%d grade in %s School\n", s2.grade, s2.school);
+
+    return 0;
+}
