@@ -1,0 +1,21 @@
+#include <stdio.h>
+
+struct Rect {
+    int x1, y1, x2, y2;
+};
+
+int main() {
+    struct Rect r1, r2, res;
+
+    scanf("%d %d %d %d", &r1.x1, &r1.y1, &r1.x2, &r1.y2);
+    scanf("%d %d %d %d", &r2.x1, &r2.y1, &r2.x2, &r2.y2);
+
+    res.x1 = (r1.x1 < r2.x1) ? r1.x1 : r2.x1;
+    res.y1 = (r1.y1 < r2.y1) ? r1.y1 : r2.y1;
+    res.x2 = (r1.x2 > r2.x2) ? r1.x2 : r2.x2;
+    res.y2 = (r1.y2 > r2.y2) ? r1.y2 : r2.y2;
+
+    printf("%d %d %d %d\n", res.x1, res.y1, res.x2, res.y2);
+
+    return 0;
+}
