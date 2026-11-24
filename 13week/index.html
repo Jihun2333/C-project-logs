@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GPS 이동 경로 시각화 (API 키 불필요)</title>
+
+  <!-- Leaflet CSS (API 키 불필요) -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans KR", sans-serif;
+      background-color: #f4f6f8;
+      color: #1f2937;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    header {
+      background: #111827;
+      color: #ffffff;
+      padding: 12px 20px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+
+    button,
+    .file-label {
+      background: #2563eb;
+      color: #ffffff;
+      border: none;
+      border-radius: 6px;
+      padding: 7px 12px;
+      font-size: 13px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: background 0.15s ease;
+    }
+
+    button:hover,
+    .file-label:hover {
+      background: #1d4ed8;
+    }
+
+    button.secondary {
+      background: #374151;
+    }
+
+    button.secondary:hover {
+      background: #4b5563;
+    }
+
+    input[type="file"] {
+      display: none;
+    }
+
+    .main-container {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      min-height: 0;
+    }
+
+    #map {
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+
+    .sidebar {
+      background: #ffffff;
+      border-left: 1px solid #e5e7eb;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      overflow-y: auto;
+    }
+
+    .stats {
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .stats strong {
+      color: #111827;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 220px;
+      flex: 1;
+      resize: vertical;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      padding: 10px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .status {
+      font-size: 12px;
+      padding: 8px 10px;
+      border-radius: 6px;
+      background: #eff6ff;
+      color: #1e40af;
+      word-break: break-word;
+    }
+
+    .status.error {
+      background: #fef2f2;
+      color: #991b1b;
+    }
+
+    @media (max-width: 860px) {
+      .main-container {
+        grid-template-columns: 1fr;
+        grid-template-rows: 55vh auto;
+      }
+
+      .sidebar {
+        border-left: none;
+        border-top: 1px solid #e5e7eb;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>GPS 위치 및 이동 경로 시각화</h1>
+    <div class="controls">
+      <label class="file-label" for="jsonFileInput">
+        JSON 파일 선택
+      </label>
+      <input id="jsonFileInput" type="file" accept=".json,application/json" />
+      <button id="renderBtn" type="button">JSON 지도에 그리기</button>
+      <button id="sampleBtn" type="button" class="secondary">샘플 데이터</button>
+      <button id="fitBtn" type="button" class="secondary">경로 맞추기</button>
+    </div>
+  </header>
+
+  <div class="main-container">
+    <div id="map"></div>
+
+    <aside class="sidebar">
+      <div id="statusBox" class="status">
+        샘플 경로가 표시되었습니다. JSON 파일을 선택하거나 아래에 JSON을 붙여넣고 그리기를 누르세요.
+      </div>
+
+      <div class="stats" id="statsBox">
+        <div><strong>포인트 수:</strong> -</div>
+        <div><strong>총 이동 거리:</strong> -</div>
+        <div><strong>출발 시각:</strong> -</div>
+        <div><strong>도착 시각:</strong> -</div>
+      </div>
+
+      <label for="jsonInput" style="font-size: 13px; font-weight: 600;">
+        JSON 데이터 (배열 또는 객체 형태 지원)
+      </label>
+      <textarea id="jsonInput" spellcheck="false"></textarea>
+    </aside>
+  </div>
+
+  <!-- Leaflet JS (API 키 불필요) -->
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
+
+  <script>
+    // 인천 송도 일대 샘플 GPS 데이터
+    const SAMPLE_DATA = [
+      {
+        lat: 37.3924,
+        lng: 126.6429,
+        timestamp: "2026-11-24T09:00:00+09:00",
+        label: "출발: 센트럴파크역",
+        speed: 0
+      },
+      {
+        lat: 37.3941,
+        lng: 126.6398,
+        timestamp: "2026-11-24T09:08:00+09:00",
+        label: "경유 1",
+        speed: 4.2
+      },
+      {
+        lat: 37.3976,
+        lng: 126.6362,
+        timestamp: "2026-11-24T09:17:00+09:00",
+        label: "경유 2",
+        speed: 5.1
+      },
+      {
+        lat: 37.4012,
+        lng: 126.6335,
+        timestamp: "2026-11-24T09:26:00+09:00",
+        label: "경유 3",
+        speed: 3.8
+      },
+      {
+        lat: 37.4038,
+        lng: 126.6301,
+        timestamp: "2026-11-24T09:35:00+09:00",
+        label: "도착: 커낼워크",
+        speed: 0
+      }
+    ];
+
+    // 지도 초기화
+    const map = L.map("map").setView([37.3976, 126.6362], 14);
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: "&copy; OpenStreetMap contributors"
+    }).addTo(map);
+
+    const pathLayerGroup = L.layerGroup().addTo(map);
+    let currentBounds = null;
+
+    const jsonInputEl = document.getElementById("jsonInput");
+    const jsonFileInputEl = document.getElementById("jsonFileInput");
+    const renderBtnEl = document.getElementById("renderBtn");
+    const sampleBtnEl = document.getElementById("sampleBtn");
+    const fitBtnEl = document.getElementById("fitBtn");
+    const statusBoxEl = document.getElementById("statusBox");
+    const statsBoxEl = document.getElementById("statsBox");
+
+    function setStatus(message, isError = false) {
+      statusBoxEl.textContent = message;
+      statusBoxEl.className = isError ? "status error" : "status";
+    }
+
+    /**
+     * 다양한 JSON 구조를 [{ lat, lng, timestamp, ... }] 형태로 정규화합니다.
+     * 지원 예:
+     * 1) [{ lat, lng }, ...] / [{ latitude, longitude }, ...]
+     * 2) { points: [...] } / { track: [...] } / { locations: [...] } / { data: [...] }
+     * 3) GeoJSON FeatureCollection 또는 LineString
+     */
+    function normalizeGpsPoints(raw) {
+      let list = raw;
+
+      if (!Array.isArray(list) && raw && typeof raw === "object") {
+        if (raw.type === "FeatureCollection" && Array.isArray(raw.features)) {
+          list = raw.features
+            .filter((f) => f && f.geometry && f.geometry.type === "Point" && Array.isArray(f.geometry.coordinates))
+            .map((f) => ({
+              lng: f.geometry.coordinates[0],
+              lat: f.geometry.coordinates[1],
+              ...(f.properties || {})
+            }));
+        } else if (raw.type === "LineString" && Array.isArray(raw.coordinates)) {
+          list = raw.coordinates.map((coord) => ({
+            lng: coord[0],
+            lat: coord[1]
+          }));
+        } else {
+          const candidateKey = ["points", "track", "locations", "route", "data", "items"].find(
+            (key) => Array.isArray(raw[key])
+          );
+          if (candidateKey) {
+            list = raw[candidateKey];
+          }
+        }
+      }
+
+      if (!Array.isArray(list)) {
+        throw new Error("유효한 GPS 포인트 배열을 찾을 수 없습니다.");
+      }
+
+      const normalized = [];
+      for (let i = 0; i < list.length; i++) {
+        const item = list[i];
+        if (!item || typeof item !== "object") continue;
+
+        const lat = Number(item.lat ?? item.latitude);
+        const lng = Number(item.lng ?? item.lon ?? item.longitude);
+
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+        if (lat < -90 || lat > 90 || lng < -180 || lng > 180) continue;
+
+        normalized.push({
+          index: i + 1,
+          lat,
+          lng,
+          timestamp: item.timestamp ?? item.time ?? item.recordedAt ?? null,
+          label: item.label ?? item.name ?? null,
+          speed: item.speed ?? null,
+          raw: item
+        });
+      }
+
+      if (normalized.length === 0) {
+        throw new Error("올바른 위도(lat/latitude)와 경도(lng/longitude) 값이 없습니다.");
+      }
+
+      return normalized;
+    }
+
+    // 두 GPS 좌표 간 거리 계산 (미터 단위, Haversine 공식)
+    function haversineMeters(a, b) {
+      const R = 6371000;
+      const toRad = (deg) => (deg * Math.PI) / 180;
+      const dLat = toRad(b.lat - a.lat);
+      const dLng = toRad(b.lng - a.lng);
+      const lat1 = toRad(a.lat);
+      const lat2 = toRad(b.lat);
+
+      const h =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+      return 2 * R * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+    }
+
+    function formatDistance(meters) {
+      if (meters >= 1000) {
+        return `${(meters / 1000).toFixed(2)} km`;
+      }
+      return `${Math.round(meters)} m`;
+    }
+
+    function updateStats(points) {
+      let totalMeters = 0;
+      for (let i = 1; i < points.length; i++) {
+        totalMeters += haversineMeters(points[i - 1], points[i]);
+      }
+
+      const startTime = points[0].timestamp || "-";
+      const endTime = points[points.length - 1].timestamp || "-";
+
+      statsBoxEl.innerHTML = `
+        <div><strong>포인트 수:</strong> ${points.length.toLocaleString()}개</div>
+        <div><strong>총 이동 거리:</strong> ${formatDistance(totalMeters)}</div>
+        <div><strong>출발 시각:</strong> ${startTime}</div>
+        <div><strong>도착 시각:</strong> ${endTime}</div>
+      `;
+    }
+
+    function renderGpsData(jsonText) {
+      try {
+        const parsed = JSON.parse(jsonText);
+        const points = normalizeGpsPoints(parsed);
+
+        pathLayerGroup.clearLayers();
+
+        const latLngs = points.map((p) => [p.lat, p.lng]);
+
+        // 이동 경로 선 그리기
+        const polyline = L.polyline(latLngs, {
+          color: "#2563eb",
+          weight: 4,
+          opacity: 0.85
+        }).addTo(pathLayerGroup);
+
+        // 마커 추가 (출발, 경유, 도착)
+        points.forEach((pt, idx) => {
+          const isStart = idx === 0;
+          const isEnd = idx === points.length - 1;
+
+          const markerOptions = isStart
+            ? { radius: 8, color: "#065f46", fillColor: "#10b981", fillOpacity: 0.95, weight: 2 }
+            : isEnd
+            ? { radius: 8, color: "#991b1b", fillColor: "#ef4444", fillOpacity: 0.95, weight: 2 }
+            : { radius: 5, color: "#1d4ed8", fillColor: "#60a5fa", fillOpacity: 0.9, weight: 2 };
+
+          const titleText =
+            pt.label || (isStart ? "출발점" : isEnd ? "도착점" : `경유점 #${pt.index}`);
+
+          const popupHtml = `
+            <div style="font-size:12px; line-height:1.5;">
+              <strong>${titleText}</strong><br/>
+              위도: ${pt.lat.toFixed(6)}<br/>
+              경도: ${pt.lng.toFixed(6)}
+              ${pt.timestamp ? `<br/>시각: ${pt.timestamp}` : ""}
+              ${pt.speed !== null ? `<br/>속도: ${pt.speed}` : ""}
+            </div>
+          `;
+
+          L.circleMarker([pt.lat, pt.lng], markerOptions)
+            .bindPopup(popupHtml)
+            .addTo(pathLayerGroup);
+        });
+
+        currentBounds = polyline.getBounds();
+        if (currentBounds.isValid()) {
+          map.fitBounds(currentBounds, { padding: [30, 30] });
+        }
+
+        updateStats(points);
+        setStatus(`총 ${points.length}개의 GPS 포인트를 지도에 표시했습니다.`);
+      } catch (err) {
+        setStatus(`오류: ${err.message}`, true);
+      }
+    }
+
+    // 이벤트 연결
+    renderBtnEl.addEventListener("click", () => {
+      renderGpsData(jsonInputEl.value);
+    });
+
+    sampleBtnEl.addEventListener("click", () => {
+      const formatted = JSON.stringify(SAMPLE_DATA, null, 2);
+      jsonInputEl.value = formatted;
+      renderGpsData(formatted);
+    });
+
+    fitBtnEl.addEventListener("click", () => {
+      if (currentBounds && currentBounds.isValid()) {
+        map.fitBounds(currentBounds, { padding: [30, 30] });
+      }
+    });
+
+    jsonFileInputEl.addEventListener("change", (event) => {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const content = String(e.target.result || "");
+        jsonInputEl.value = content;
+        renderGpsData(content);
+      };
+      reader.onerror = () => {
+        setStatus("파일을 읽는 중 오류가 발생했습니다.", true);
+      };
+      reader.readAsText(file, "utf-8");
+    });
+
+    // 초기 샘플 데이터 로드
+    const initialJson = JSON.stringify(SAMPLE_DATA, null, 2);
+    jsonInputEl.value = initialJson;
+    renderGpsData(initialJson);
+  </script>
+</body>
+</html>
